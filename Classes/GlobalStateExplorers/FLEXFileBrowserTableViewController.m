@@ -169,8 +169,8 @@
     UITableViewCell *cell = nil;
 
     // Separate image and text only cells because otherwise the separator lines get out-of-whack on image cells reused with text only.
-    BOOL showImagePreview = [FLEXUtility isImagePathExtension:[fullPath pathExtension]];
-    NSString *cellIdentifier = showImagePreview ? imageCellIdentifier : textCellIdentifier;
+    UIImage *image = [UIImage imageWithContentsOfFile:fullPath];
+    NSString *cellIdentifier = image ? imageCellIdentifier : textCellIdentifier;
 
     if (!cell) {
         cell = [[FLEXFileBrowserTableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellIdentifier];
@@ -183,7 +183,7 @@
     cell.textLabel.text = cellTitle;
     cell.detailTextLabel.text = subtitle;
 
-    if (showImagePreview) {
+    if (image) {
         cell.imageView.contentMode = UIViewContentModeScaleAspectFit;
         cell.imageView.image = [UIImage imageWithContentsOfFile:fullPath];
     }
@@ -211,42 +211,44 @@
     UIViewController *drillInViewController = nil;
     if (isDirectory) {
         drillInViewController = [[[self class] alloc] initWithPath:fullPath];
-    } else if ([FLEXUtility isImagePathExtension:pathExtension]) {
-        UIImage *image = [UIImage imageWithContentsOfFile:fullPath];
-        drillInViewController = [[FLEXImagePreviewViewController alloc] initWithImage:image];
     } else {
-        NSData *fileData = [NSData dataWithContentsOfFile:fullPath];
-        if (!fileData.length) {
-            [self alert:@"Empty File" message:@"No data returned from the file."];
-            return;
-        }
-
-        // Special case keyed archives, json, and plists to get more readable data.
-        NSString *prettyString = nil;
-        if ([pathExtension isEqualToString:@"json"]) {
-            prettyString = [FLEXUtility prettyJSONStringFromData:fileData];
+        UIImage *image = [UIImage imageWithContentsOfFile:fullPath];
+        if (image) {
+            drillInViewController = [[FLEXImagePreviewViewController alloc] initWithImage:image];
         } else {
-            @try {
-                // Try to decode an archived object regardless of file extension
-                id object = [NSKeyedUnarchiver unarchiveObjectWithData:fileData];
-                drillInViewController = [FLEXObjectExplorerFactory explorerViewControllerForObject:object];
-            } @catch (NSException *e) {
-                // Try to decode a property list instead, also regardless of file extension
-                prettyString = [[NSPropertyListSerialization propertyListWithData:fileData options:0 format:NULL error:NULL] description];
+            NSData *fileData = [NSData dataWithContentsOfFile:fullPath];
+            if (!fileData.length) {
+                [self alert:@"Empty File" message:@"No data returned from the file."];
+                return;
             }
-        }
-
-        if (prettyString.length) {
-            drillInViewController = [[FLEXWebViewController alloc] initWithText:prettyString];
-        } else if ([FLEXWebViewController supportsPathExtension:pathExtension]) {
-            drillInViewController = [[FLEXWebViewController alloc] initWithURL:[NSURL fileURLWithPath:fullPath]];
-        } else if ([FLEXTableListViewController supportsExtension:pathExtension]) {
-            drillInViewController = [[FLEXTableListViewController alloc] initWithPath:fullPath];
-        }
-        else if (!drillInViewController) {
-            NSString *fileString = [NSString stringWithUTF8String:fileData.bytes];
-            if (fileString.length) {
-                drillInViewController = [[FLEXWebViewController alloc] initWithText:fileString];
+            
+            // Special case keyed archives, json, and plists to get more readable data.
+            NSString *prettyString = nil;
+            if ([pathExtension isEqualToString:@"json"]) {
+                prettyString = [FLEXUtility prettyJSONStringFromData:fileData];
+            } else {
+                @try {
+                    // Try to decode an archived object regardless of file extension
+                    id object = [NSKeyedUnarchiver unarchiveObjectWithData:fileData];
+                    drillInViewController = [FLEXObjectExplorerFactory explorerViewControllerForObject:object];
+                } @catch (NSException *e) {
+                    // Try to decode a property list instead, also regardless of file extension
+                    prettyString = [[NSPropertyListSerialization propertyListWithData:fileData options:0 format:NULL error:NULL] description];
+                }
+            }
+            
+            if (prettyString.length) {
+                drillInViewController = [[FLEXWebViewController alloc] initWithText:prettyString];
+            } else if ([FLEXWebViewController supportsPathExtension:pathExtension]) {
+                drillInViewController = [[FLEXWebViewController alloc] initWithURL:[NSURL fileURLWithPath:fullPath]];
+            } else if ([FLEXTableListViewController supportsExtension:pathExtension]) {
+                drillInViewController = [[FLEXTableListViewController alloc] initWithPath:fullPath];
+            }
+            else if (!drillInViewController) {
+                NSString *fileString = [NSString stringWithUTF8String:fileData.bytes];
+                if (fileString.length) {
+                    drillInViewController = [[FLEXWebViewController alloc] initWithText:fileString];
+                }
             }
         }
     }
